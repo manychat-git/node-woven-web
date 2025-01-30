@@ -1,93 +1,25 @@
-import { useEffect, useRef, useState } from 'react';
-import * as d3 from 'd3';
-import { GraphData, Node } from './types';
+import { useEffect, useRef } from 'react';
+import ForceGraph3D from '3d-force-graph';
 import { sampleData } from './sampleData';
 import InfoPanel from './InfoPanel';
 import GraphControls from './GraphControls';
+import { Node } from './types';
+import * as THREE from 'three';
 
 const NetworkGraph = () => {
-  const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const graphRef = useRef<any>(null);
   const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  
+
   useEffect(() => {
-    if (!svgRef.current) return;
+    if (!containerRef.current) return;
 
-    // Clear previous graph
-    d3.select(svgRef.current).selectAll("*").remove();
-
-    const width = window.innerWidth;
-    const height = window.innerHeight;
-
-    // Create SVG
-    const svg = d3.select(svgRef.current)
-      .attr('width', width)
-      .attr('height', height);
-
-    // Create zoom behavior
-    const zoom = d3.zoom()
-      .scaleExtent([0.5, 2])
-      .on('zoom', (event) => {
-        g.attr('transform', event.transform);
-      });
-
-    svg.call(zoom as any);
-
-    // Create main group for graph
-    const g = svg.append('g');
-
-    // Create force simulation
-    const simulation = d3.forceSimulation(sampleData.nodes as any)
-      .force('link', d3.forceLink(sampleData.links)
-        .id((d: any) => d.id)
-        .distance(150)
-      )
-      .force('charge', d3.forceManyBody().strength(-300))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(40));
-
-    // Create links
-    const links = g.append('g')
-      .selectAll('line')
-      .data(sampleData.links)
-      .join('line')
-      .attr('stroke', '#ddd')
-      .attr('stroke-opacity', 0.6)
-      .attr('stroke-width', 2);
-
-    // Create node groups
-    const nodes = g.append('g')
-      .selectAll('g')
-      .data(sampleData.nodes)
-      .join('g')
-      .attr('cursor', 'pointer')
-      .on('click', (event, d) => {
-        event.stopPropagation();
-        setSelectedNode(d);
-      });
-
-    // Add circular clips for images
-    nodes.append('defs')
-      .append('clipPath')
-      .attr('id', (d: Node) => `clip-${d.id}`)
-      .append('circle')
-      .attr('r', 20);
-
-    // Add images to nodes
-    nodes.append('image')
-      .attr('xlink:href', (d: Node) => d.imageUrl)
-      .attr('clip-path', (d: Node) => `url(#clip-${d.id})`)
-      .attr('x', -20)
-      .attr('y', -20)
-      .attr('width', 40)
-      .attr('height', 40)
-      .attr('preserveAspectRatio', 'xMidYMid slice');
-
-    // Add circular border
-    nodes.append('circle')
-      .attr('r', 20)
-      .attr('fill', 'none')
-      .attr('stroke', (d: Node) => {
-        switch (d.type) {
+    // Initialize the 3D force graph
+    const Graph = ForceGraph3D()(containerRef.current)
+      .graphData(sampleData)
+      .nodeLabel('title')
+      .nodeColor((node: any) => {
+        switch (node.type) {
           case 'article': return '#4A90E2';
           case 'author': return '#50C878';
           case 'topic': return '#FF6B6B';
@@ -95,71 +27,94 @@ const NetworkGraph = () => {
           default: return '#999';
         }
       })
-      .attr('stroke-width', 3);
+      .nodeThreeObject((node: any) => {
+        // Create sprite material with node image
+        const imgTexture = new THREE.TextureLoader().load(node.imageUrl);
+        const material = new THREE.SpriteMaterial({ map: imgTexture });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(16, 16, 1);
 
-    // Add labels to nodes
-    nodes.append('text')
-      .text((d: Node) => d.title)
-      .attr('x', 25)
-      .attr('y', 5)
-      .attr('font-size', '12px')
-      .attr('fill', '#666')
-      .attr('stroke', 'white')
-      .attr('stroke-width', 0.5)
-      .attr('paint-order', 'stroke');
+        // Create container for sprite and text
+        const group = new THREE.Group();
+        group.add(sprite);
 
-    // Update positions on each tick
-    simulation.on('tick', () => {
-      links
-        .attr('x1', (d: any) => d.source.x)
-        .attr('y1', (d: any) => d.source.y)
-        .attr('x2', (d: any) => d.target.x)
-        .attr('y2', (d: any) => d.target.y);
+        // Add text label
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        if (context) {
+          context.font = '12px Arial';
+          context.fillStyle = 'white';
+          context.fillText(node.title, 0, 24);
+          const texture = new THREE.CanvasTexture(canvas);
+          const labelSprite = new THREE.Sprite(
+            new THREE.SpriteMaterial({ map: texture })
+          );
+          labelSprite.position.y = -10;
+          labelSprite.scale.set(30, 15, 1);
+          group.add(labelSprite);
+        }
 
-      nodes.attr('transform', (d: any) => `translate(${d.x},${d.y})`);
-    });
+        return group;
+      })
+      .linkWidth(1)
+      .linkOpacity(0.5)
+      .onNodeClick((node: any) => {
+        setSelectedNode(node);
+        // Aim at node from outside
+        const distance = 40;
+        const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
+        graphRef.current.cameraPosition(
+          { x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio },
+          node,
+          3000
+        );
+      });
+
+    // Add camera controls
+    Graph.controls().enableDamping = true;
+    Graph.controls().dampingFactor = 0.1;
+    Graph.controls().rotateSpeed = 0.8;
+
+    // Save graph reference
+    graphRef.current = Graph;
+
+    // Handle window resize
+    const handleResize = () => {
+      Graph.width(containerRef.current?.clientWidth ?? window.innerWidth);
+      Graph.height(containerRef.current?.clientHeight ?? window.innerHeight);
+    };
+    window.addEventListener('resize', handleResize);
 
     // Cleanup
     return () => {
-      simulation.stop();
+      window.removeEventListener('resize', handleResize);
+      Graph._destructor();
     };
   }, []);
 
   const handleZoomIn = () => {
-    d3.select(svgRef.current)
-      .transition()
-      .duration(300)
-      .call(
-        (d3.zoom() as any).scaleBy, 1.2
-      );
+    if (graphRef.current) {
+      const currentDistance = graphRef.current.camera().position.z;
+      graphRef.current.cameraPosition({ z: currentDistance * 0.8 });
+    }
   };
 
   const handleZoomOut = () => {
-    d3.select(svgRef.current)
-      .transition()
-      .duration(300)
-      .call(
-        (d3.zoom() as any).scaleBy, 0.8
-      );
+    if (graphRef.current) {
+      const currentDistance = graphRef.current.camera().position.z;
+      graphRef.current.cameraPosition({ z: currentDistance * 1.2 });
+    }
   };
 
   const handleReset = () => {
-    d3.select(svgRef.current)
-      .transition()
-      .duration(300)
-      .call(
-        (d3.zoom() as any).transform,
-        d3.zoomIdentity
-      );
+    if (graphRef.current) {
+      graphRef.current.cameraPosition({ x: 0, y: 0, z: 200 }, { x: 0, y: 0, z: 0 }, 1000);
+    }
   };
 
   return (
-    <div className="relative w-full h-screen bg-gray-50">
-      <svg
-        ref={svgRef}
-        className="w-full h-full"
-        onClick={() => setSelectedNode(null)}
-      />
+    <div className="relative w-full h-screen bg-gray-900">
+      <div ref={containerRef} className="w-full h-full" />
       <InfoPanel
         selectedNode={selectedNode}
         onClose={() => setSelectedNode(null)}

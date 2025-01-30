@@ -6,6 +6,9 @@ export interface Node {
   title: string;
   description?: string;
   imageUrl?: string;
+  x?: number;
+  y?: number;
+  z?: number;
 }
 
 export interface Link {
