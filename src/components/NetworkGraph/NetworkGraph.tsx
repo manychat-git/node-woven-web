@@ -4,6 +4,7 @@ import { GraphData, Node } from './types';
 import { sampleData } from './sampleData';
 import InfoPanel from './InfoPanel';
 import GraphControls from './GraphControls';
+import { BookOpen, MessageSquare, User, Globe } from 'lucide-react';
 
 const NetworkGraph = () => {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -39,11 +40,11 @@ const NetworkGraph = () => {
     const simulation = d3.forceSimulation(sampleData.nodes as any)
       .force('link', d3.forceLink(sampleData.links)
         .id((d: any) => d.id)
-        .distance(100)
+        .distance(150) // Increased distance for better visibility
       )
-      .force('charge', d3.forceManyBody().strength(-200))
+      .force('charge', d3.forceManyBody().strength(-300)) // Increased repulsion
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(30));
+      .force('collision', d3.forceCollide().radius(40)); // Increased collision radius
 
     // Create links
     const links = g.append('g')
@@ -51,9 +52,10 @@ const NetworkGraph = () => {
       .data(sampleData.links)
       .join('line')
       .attr('stroke', '#ddd')
-      .attr('stroke-opacity', 0.6);
+      .attr('stroke-opacity', 0.6)
+      .attr('stroke-width', 2);
 
-    // Create nodes
+    // Create node groups
     const nodes = g.append('g')
       .selectAll('g')
       .data(sampleData.nodes)
@@ -64,9 +66,14 @@ const NetworkGraph = () => {
         setSelectedNode(d);
       });
 
-    // Add circles to nodes
-    nodes.append('circle')
-      .attr('r', 12)
+    // Add shapes/backgrounds to nodes
+    nodes.append('rect')
+      .attr('rx', (d: Node) => d.type === 'article' ? 8 : 16) // Rounded corners
+      .attr('ry', (d: Node) => d.type === 'article' ? 8 : 16)
+      .attr('x', -20)
+      .attr('y', -20)
+      .attr('width', 40)
+      .attr('height', 40)
       .attr('fill', (d: Node) => {
         switch (d.type) {
           case 'article': return '#4A90E2';
@@ -76,16 +83,58 @@ const NetworkGraph = () => {
           default: return '#999';
         }
       })
+      .attr('fill-opacity', 0.9)
       .attr('stroke', '#fff')
       .attr('stroke-width', 2);
+
+    // Add icons to nodes
+    nodes.each(function(d: Node) {
+      const node = d3.select(this);
+      const iconSize = 20;
+      
+      // Create a foreignObject to embed SVG icons
+      const fo = node.append('foreignObject')
+        .attr('x', -iconSize/2)
+        .attr('y', -iconSize/2)
+        .attr('width', iconSize)
+        .attr('height', iconSize);
+      
+      // Append div to foreignObject for icon rendering
+      const div = fo.append('xhtml:div')
+        .style('width', '100%')
+        .style('height', '100%')
+        .style('display', 'flex')
+        .style('align-items', 'center')
+        .style('justify-content', 'center');
+      
+      // Render appropriate icon based on node type
+      const iconColor = '#FFFFFF';
+      switch (d.type) {
+        case 'article':
+          div.html(`<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${BookOpen.toString()}</svg>`);
+          break;
+        case 'author':
+          div.html(`<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${User.toString()}</svg>`);
+          break;
+        case 'topic':
+          div.html(`<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${Globe.toString()}</svg>`);
+          break;
+        case 'meme':
+          div.html(`<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="${iconColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${MessageSquare.toString()}</svg>`);
+          break;
+      }
+    });
 
     // Add labels to nodes
     nodes.append('text')
       .text((d: Node) => d.title)
-      .attr('x', 15)
+      .attr('x', 25)
       .attr('y', 5)
       .attr('font-size', '12px')
-      .attr('fill', '#666');
+      .attr('fill', '#666')
+      .attr('stroke', 'white')
+      .attr('stroke-width', 0.5)
+      .attr('paint-order', 'stroke');
 
     // Update positions on each tick
     simulation.on('tick', () => {
