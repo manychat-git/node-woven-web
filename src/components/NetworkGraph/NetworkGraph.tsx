@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ForceGraph3D from '3d-force-graph';
 import { sampleData } from './sampleData';
 import InfoPanel from './InfoPanel';
@@ -15,7 +15,7 @@ const NetworkGraph = () => {
     if (!containerRef.current) return;
 
     // Initialize the 3D force graph
-    const Graph = ForceGraph3D()(containerRef.current)
+    const Graph = new ForceGraph3D()(containerRef.current)
       .graphData(sampleData)
       .nodeLabel('title')
       .nodeColor((node: any) => {
